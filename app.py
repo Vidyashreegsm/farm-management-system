@@ -300,16 +300,18 @@ def fertilizer_usage():
 @app.route("/farmer_details/<int:farmer_id>")
 def farmer_details(farmer_id):
 
-    # Farmer basic info
+    # FARMER INFO
+
     cursor.execute("""
-        SELECT *
+        SELECT farmer_id, name, phone, village
         FROM farmers
         WHERE farmer_id = %s
     """, (farmer_id,))
 
     farmer = cursor.fetchone()
 
-    # Crop details + profit
+    # CROP DETAILS
+
     cursor.execute("""
         SELECT
             crop_name,
@@ -321,46 +323,39 @@ def farmer_details(farmer_id):
             cost_price,
             (yield_kg * selling_price) AS total_income,
             ((yield_kg * selling_price) - cost_price) AS profit
+
         FROM farmer_crops
+
         WHERE farmer_id = %s
     """, (farmer_id,))
 
     crops = cursor.fetchall()
 
-    # Fertilizer usage
+    # FERTILIZER DETAILS
+
     cursor.execute("""
         SELECT
-            fertilizers.fertilizer_name,
-            fertilizer_usage.crop_name,
-            fertilizer_usage.quantity_used,
-            fertilizers.price_per_bag,
-            (fertilizer_usage.quantity_used * fertilizers.price_per_bag) AS total_cost
-        FROM fertilizer_usage
-        JOIN fertilizers
-        ON fertilizer_usage.fertilizer_id = fertilizers.fertilizer_id
-        WHERE fertilizer_usage.farmer_id = %s
+            f.fertilizer_name,
+            fu.quantity_used,
+            f.price_per_bag,
+            (fu.quantity_used * f.price_per_bag) AS total_cost
+
+        FROM fertilizer_usage fu
+
+        JOIN fertilizers f
+        ON fu.fertilizer_id = f.fertilizer_id
+
+        WHERE fu.farmer_id = %s
     """, (farmer_id,))
 
     fertilizers = cursor.fetchall()
-
-    # Total profit
-    cursor.execute("""
-        SELECT
-        SUM((yield_kg * selling_price) - cost_price)
-        FROM farmer_crops
-        WHERE farmer_id = %s
-    """, (farmer_id,))
-
-    total_profit = cursor.fetchone()[0]
 
     return render_template(
         "farmer_details.html",
         farmer=farmer,
         crops=crops,
-        fertilizers=fertilizers,
-        total_profit=total_profit
+        fertilizers=fertilizers
     )
-
 # ---------------- DASHBOARD ----------------
 @app.route('/dashboard')
 def dashboard():
