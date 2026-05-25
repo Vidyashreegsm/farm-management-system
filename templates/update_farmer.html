@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+    <title>Update Farmer</title>
+
+    <link rel="stylesheet"
+    href="{{ url_for('static', filename='style.css') }}">
+
+</head>
+
+<body>
+
+<div class="overlay">
+
+    <div class="navbar">
+
+{% if session['role'] == 'admin' %}
+
+<a href="{{ url_for('home') }}">Home</a>
+
+<a href="{{ url_for('view_farmers') }}">
+Farmers
+</a>
+
+<a href="{{ url_for('view_crops') }}">
+Crops
+</a>
+
+<a href="{{ url_for('view_fertilizers') }}">
+Fertilizers
+</a>
+
+<a href="{{ url_for('dashboard') }}">
+Dashboard
+</a>
+
+{% endif %}
+
+<a href="{{ url_for('logout') }}">
+Logout
+</a>
+
+</div>
+
+    <div class="form-container">
+
+        <h1>Update Farmer</h1>
+
+        <form method="POST">
+
+            <input type="text"
+                   name="name"
+                   value="{{ farmer[1] }}"
+                   class="form-control"
+                   required>
+
+            <input type="text"
+                   name="phone"
+                   value="{{ farmer[2] }}"
+                   class="form-control"
+                   required>
+
+            <input type="text"
+                   name="village"
+                   value="{{ farmer[3] }}"
+                   class="form-control"
+                   required>
+
+            <button type="submit"
+                    class="btn-submit">
+
+                    Update Farmer
+
+            </button>
+
+        </form>
+
+    </div>
+
+</div>
+
+</body>
+
+</html>

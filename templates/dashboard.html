@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+    <title>Dashboard</title>
+
+    <link rel="stylesheet"
+    href="{{ url_for('static', filename='style.css') }}">
+
+    <!-- Chart JS -->
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+
+        .dashboard{
+
+            display:grid;
+
+            grid-template-columns:repeat(2,1fr);
+
+            gap:30px;
+
+            width:90%;
+
+            margin:auto;
+
+            margin-top:30px;
+        }
+
+        .card{
+
+            background:rgba(255,255,255,0.15);
+
+            padding:40px;
+
+            border-radius:20px;
+
+            text-align:center;
+
+            backdrop-filter:blur(10px);
+
+            color:white;
+
+            box-shadow:0px 0px 15px rgba(0,0,0,0.5);
+        }
+
+        .card h1{
+
+            font-size:55px;
+
+            margin:10px;
+        }
+
+        .chart-box{
+
+            width:90%;
+
+            margin:auto;
+
+            margin-top:40px;
+
+            background:white;
+
+            padding:25px;
+
+            border-radius:20px;
+        }
+
+        .weather{
+
+            width:90%;
+
+            margin:auto;
+
+            margin-top:30px;
+
+            background:rgba(255,255,255,0.15);
+
+            padding:25px;
+
+            border-radius:20px;
+
+            color:white;
+
+            text-align:center;
+
+            backdrop-filter:blur(10px);
+        }
+
+    </style>
+
+</head>
+
+<body>
+
+<div class="overlay">
+
+    <!-- NAVBAR -->
+
+    <div class="navbar">
+
+{% if session['role'] == 'admin' %}
+
+<a href="{{ url_for('home') }}">Home</a>
+
+<a href="{{ url_for('view_farmers') }}">
+Farmers
+</a>
+
+<a href="{{ url_for('view_crops') }}">
+Crops
+</a>
+
+<a href="{{ url_for('view_fertilizers') }}">
+Fertilizers
+</a>
+
+<a href="{{ url_for('dashboard') }}">
+Dashboard
+</a>
+
+{% endif %}
+
+<a href="{{ url_for('logout') }}">
+Logout
+</a>
+
+</div>
+    <!-- TITLE -->
+
+    <h1 style="text-align:center; color:white; margin-top:20px;">
+
+        📊 Farm Analytics Dashboard
+
+    </h1>
+
+    <!-- DASHBOARD CARDS -->
+
+    <div class="dashboard">
+
+        <div class="card">
+
+            <h2>👨‍🌾 Total Farmers</h2>
+
+            <h1>{{ total_farmers }}</h1>
+
+        </div>
+
+        <div class="card">
+
+            <h2>🧪 Fertilizers</h2>
+
+            <h1>{{ total_fertilizers }}</h1>
+
+        </div>
+
+        <div class="card">
+
+            <h2>📦 Total Stock</h2>
+
+            <h1>{{ total_stock }}</h1>
+
+        </div>
+
+        <div class="card">
+
+            <h2>🌱 Usage</h2>
+
+            <h1>{{ total_usage }}</h1>
+
+        </div>
+
+    </div>
+
+    <!-- CHART -->
+
+    <div class="chart-box">
+
+        <h2 style="text-align:center;">
+
+            💰 Crop Profit / Loss Visualization
+
+        </h2>
+
+        <canvas id="profitChart"></canvas>
+
+    </div>
+
+    <!-- WEATHER -->
+
+    <div class="weather">
+
+        <h2>☁ Smart Agriculture Insight</h2>
+
+        <p style="font-size:22px;">
+
+            Weather is suitable for irrigation and fertilizer application.
+
+        </p>
+
+    </div>
+
+</div>
+
+<!-- CHART SCRIPT -->
+
+<script>
+
+    const cropNames = JSON.parse('{{ crop_names | tojson | safe }}');
+
+    const profits = JSON.parse('{{ profits | tojson | safe }}');
+
+    const colors = profits.map(value =>
+        value >= 0 ? 'green' : 'red'
+    );
+
+    const ctx = document.getElementById('profitChart').getContext('2d');
+
+    new Chart(ctx, {
+
+        type: 'bar',
+
+        data: {
+
+            labels: cropNames,
+
+            datasets: [{
+
+                label: 'Profit / Loss',
+
+                data: profits,
+
+                backgroundColor: colors,
+
+                borderRadius: 10
+
+            }]
+
+        },
+
+        options: {
+
+            responsive: true,
+
+            scales: {
+
+                y: {
+
+                    beginAtZero: true
+
+                }
+
+            }
+
+        }
+
+    });
+
+</script>
+
+</body>
+
+</html>

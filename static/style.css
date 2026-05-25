@@ -1,0 +1,197 @@
+body{
+    margin:0;
+    padding:0;
+    font-family:Arial, sans-serif;
+
+    background-image:url("https://images.unsplash.com/photo-1500382017468-9049fed747ef");
+
+    background-size:cover;
+    background-position:center;
+    background-attachment:fixed;
+}
+
+
+/* DARK OVERLAY */
+
+.overlay{
+
+    width:100%;
+
+    min-height:100vh;
+
+    background:rgba(0,0,0,0.55);
+
+    padding-bottom:30px;
+}
+
+
+/* NAVBAR */
+
+.navbar{
+
+    background:#1f2937;
+
+    padding:15px;
+}
+
+.navbar a{
+
+    color:white;
+
+    text-decoration:none;
+
+    margin-right:20px;
+
+    font-weight:bold;
+
+    font-size:17px;
+}
+
+.navbar a:hover{
+
+    color:#90ee90;
+}
+
+
+/* FORM DESIGN */
+
+.form-container{
+
+    width:420px;
+
+    margin:auto;
+
+    margin-top:25px;
+
+    background:rgba(255,255,255,0.15);
+
+    padding:25px;
+
+    border-radius:15px;
+
+    backdrop-filter:blur(10px);
+
+    color:white;
+
+    box-shadow:0px 0px 15px rgba(0,0,0,0.5);
+}
+
+
+/* HEADINGS */
+
+h1, h2{
+
+    text-align:center;
+
+    color:white;
+
+    margin-top:20px;
+}
+
+
+/* INPUTS */
+
+.form-control{
+
+    width:100%;
+
+    padding:12px;
+
+    margin-top:10px;
+
+    margin-bottom:15px;
+
+    border:none;
+
+    border-radius:8px;
+
+    font-size:15px;
+}
+
+
+/* BUTTON */
+
+.btn-submit{
+
+    width:100%;
+
+    background:green;
+
+    color:white;
+
+    padding:12px;
+
+    border:none;
+
+    border-radius:8px;
+
+    font-size:17px;
+
+    cursor:pointer;
+
+    font-weight:bold;
+}
+
+.btn-submit:hover{
+
+    background:darkgreen;
+}
+
+
+/* TABLE */
+
+table{
+
+    width:95%;
+
+    margin:auto;
+
+    margin-top:20px;
+
+    border-collapse:collapse;
+
+    background:white;
+}
+
+th, td{
+
+    border:1px solid #333;
+
+    padding:10px;
+
+    text-align:center;
+}
+
+th{
+
+    background:#2c3e50;
+
+    color:white;
+}
+
+tr:nth-child(even){
+
+    background:#f2f2f2;
+}
+
+
+/* INFO BOX */
+
+.info-box{
+
+    width:85%;
+
+    margin:auto;
+
+    margin-top:20px;
+
+    background:rgba(255,255,255,0.15);
+
+    padding:20px;
+
+    border-radius:15px;
+
+    color:white;
+
+    backdrop-filter:blur(10px);
+}

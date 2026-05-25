@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+    <title>View Crops</title>
+
+    <link rel="stylesheet"
+    href="{{ url_for('static', filename='style.css') }}">
+
+    <style>
+
+        table{
+            width:95%;
+            margin:auto;
+            margin-top:20px;
+            border-collapse:collapse;
+            background:white;
+        }
+
+        th, td{
+            border:1px solid #333;
+            padding:10px;
+            text-align:center;
+        }
+
+        th{
+            background:#2c3e50;
+            color:white;
+        }
+
+        tr:nth-child(even){
+            background:#f2f2f2;
+        }
+
+        .page-title{
+            text-align:center;
+            color:white;
+            margin-top:20px;
+        }
+
+        .action-btn{
+            background:red;
+            color:white;
+            padding:6px 12px;
+            text-decoration:none;
+            border-radius:5px;
+            font-weight:bold;
+        }
+
+        .action-btn:hover{
+            background:darkred;
+        }
+
+    </style>
+
+</head>
+
+<body>
+
+<div class="overlay">
+
+    <!-- NAVBAR -->
+
+    <div class="navbar">
+
+{% if session['role'] == 'admin' %}
+
+<a href="{{ url_for('home') }}">Home</a>
+
+<a href="{{ url_for('view_farmers') }}">
+Farmers
+</a>
+
+<a href="{{ url_for('view_crops') }}">
+Crops
+</a>
+
+<a href="{{ url_for('view_fertilizers') }}">
+Fertilizers
+</a>
+
+<a href="{{ url_for('dashboard') }}">
+Dashboard
+</a>
+
+{% endif %}
+
+<a href="{{ url_for('logout') }}">
+Logout
+</a>
+
+</div>
+
+    <!-- TITLE -->
+
+    <h1 class="page-title">
+        Crop List
+    </h1>
+
+    <!-- TABLE -->
+
+    <table>
+
+        <tr>
+
+            <th>Crop ID</th>
+            <th>Farmer ID</th>
+            <th>Crop Name</th>
+            <th>Fertilizer</th>
+            <th>Season</th>
+            <th>Area</th>
+            <th>Yield</th>
+            <th>Selling Price</th>
+            <th>Cost Price</th>
+            <th>Profit</th>
+            <th>Action</th>
+
+        </tr>
+
+        {% for crop in crops %}
+
+        <tr>
+
+            <td>{{ crop[0] }}</td>
+            <td>{{ crop[1] }}</td>
+            <td>{{ crop[2] }}</td>
+            <td>{{ crop[3] }}</td>
+            <td>{{ crop[4] }}</td>
+            <td>{{ crop[5] }}</td>
+            <td>{{ crop[6] }}</td>
+            <td>{{ crop[7] }}</td>
+            <td>{{ crop[8] }}</td>
+
+            <td style="color:green; font-weight:bold;">
+
+                ₹ {{ crop[9] }}
+
+            </td>
+
+            <td>
+
+                <a href="{{ url_for('delete_crop', id=crop[0]) }}"
+                   class="action-btn"
+                   onclick="return confirm('Delete this crop?')">
+
+                    Delete
+
+                </a>
+
+            </td>
+
+        </tr>
+
+        {% endfor %}
+
+    </table>
+
+</div>
+
+</body>
+
+</html>
