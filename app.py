@@ -1,25 +1,34 @@
-from flask import Flask, render_template, request, redirect, session, url_for
+from flask import Flask, render_template, request, redirect, session, url_for, send_file
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib import colors
 import mysql.connector
+import os
 
 app = Flask(__name__)
 app.secret_key = "farmproject123"
 
 # ---------------- MYSQL CONNECTION ----------------
-db = mysql.connector.connect(
-    host="localhost",
-    user="root",
-    password="Vidya@123",
-    database="farm_management"
-)
 
-cursor = db.cursor()
+def get_db_connection():
+
+    return mysql.connector.connect(
+        host="localhost",
+        user="root",
+        password="Vidya@123",
+        database="farm_management"
+    )
 
 
 # ---------------- LOGIN ----------------
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
 
     if request.method == 'POST':
+
+        conn = get_db_connection()
+        cursor = conn.cursor(buffered=True)
 
         username = request.form['username']
         password = request.form['password']
@@ -31,6 +40,9 @@ def login():
 
         user = cursor.fetchone()
 
+        cursor.close()
+        conn.close()
+
         if user:
 
             session['user_id'] = user[0]
@@ -38,20 +50,7 @@ def login():
             session['role'] = user[3]
             session['farmer_id'] = user[4]
 
-            # ADMIN LOGIN
-            if user[3] == 'admin':
-
-                return redirect(url_for('home'))
-
-            # FARMER LOGIN
-            else:
-
-                return redirect(
-                    url_for(
-                        'farmer_details',
-                        farmer_id=user[4]
-                    )
-                )
+            return redirect(url_for('home'))
 
         else:
 
@@ -61,6 +60,7 @@ def login():
 
 
 # ---------------- LOGOUT ----------------
+
 @app.route('/logout')
 def logout():
 
@@ -70,37 +70,116 @@ def logout():
 
 
 # ---------------- HOME ----------------
+
 @app.route('/')
 def home():
 
-    if 'role' not in session:
+    if 'user_id' not in session:
 
         return redirect(url_for('login'))
 
-    # FARMERS CANNOT ACCESS ADMIN HOME
-    if session['role'] != 'admin':
+    return render_template(
+        'index.html',
+        role=session['role']
+    )
 
-        return redirect(
-            url_for(
-                'farmer_details',
-                farmer_id=session['farmer_id']
-            )
-        )
 
-    return render_template('index.html')
+# ---------------- DASHBOARD ----------------
 
+@app.route('/dashboard')
+def dashboard():
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # TOTAL FARMERS
+    cursor.execute("SELECT COUNT(*) FROM farmers")
+    total_farmers = cursor.fetchone()[0]
+
+    # TOTAL FERTILIZERS
+    cursor.execute("SELECT COUNT(*) FROM fertilizers")
+    total_fertilizers = cursor.fetchone()[0]
+
+    # TOTAL STOCK
+    cursor.execute("SELECT IFNULL(SUM(quantity_available),0) FROM fertilizers")
+    total_stock = cursor.fetchone()[0]
+
+    # TOTAL USAGE
+    cursor.execute("SELECT IFNULL(SUM(quantity_used),0) FROM fertilizer_usage")
+    total_usage = cursor.fetchone()[0]
+
+    # PROFIT CHART DATA
+    cursor.execute("""
+        SELECT crop_name,
+        (yield_kg * selling_price - cost_price) AS profit
+        FROM farmer_crops
+    """)
+
+    data = cursor.fetchall()
+
+    crop_names = []
+    profits = []
+
+    for row in data:
+
+        crop_names.append(row[0])
+        profits.append(float(row[1]))
+
+    cursor.close()
+    conn.close()
+
+    return render_template(
+        'dashboard.html',
+        total_farmers=total_farmers,
+        total_fertilizers=total_fertilizers,
+        total_stock=total_stock,
+        total_usage=total_usage,
+        crop_names=crop_names,
+        profits=profits
+    )
 
 # ---------------- ADD FARMER ----------------
+
 @app.route('/add_farmer', methods=['GET', 'POST'])
 def add_farmer():
+
+    if session['role'] != 'admin':
+
+        return "Access Denied"
+
     if request.method == 'POST':
+
+        conn = get_db_connection()
+        cursor = conn.cursor(buffered=True)
+
         name = request.form['name']
         phone = request.form['phone']
         village = request.form['village']
 
-        sql = "INSERT INTO farmers(name, phone, village) VALUES (%s, %s, %s)"
-        cursor.execute(sql, (name, phone, village))
-        db.commit()
+        cursor.execute("""
+            INSERT INTO farmers(name, phone, village)
+            VALUES(%s,%s,%s)
+        """, (name, phone, village))
+
+        conn.commit()
+
+        # CREATE FARMER LOGIN
+        farmer_id = cursor.lastrowid
+
+        cursor.execute("""
+            INSERT INTO users(username, password, role, farmer_id)
+            VALUES(%s,%s,%s,%s)
+        """, (
+            name.lower(),
+            "1234",
+            "farmer",
+            farmer_id
+        ))
+
+        conn.commit()
+
+        cursor.close()
+        conn.close()
 
         return redirect(url_for('view_farmers'))
 
@@ -108,16 +187,21 @@ def add_farmer():
 
 
 # ---------------- VIEW FARMERS ----------------
+
 @app.route('/view_farmers')
 def view_farmers():
 
-    if session['role'] != 'admin':
+    conn = get_db_connection()
+    cursor = conn.cursor(buffered=True)
 
-        return "Access Denied"
-
-    cursor.execute("SELECT * FROM farmers")
+    cursor.execute("""
+        SELECT * FROM farmers
+    """)
 
     farmers = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
 
     return render_template(
         'view_farmers.html',
@@ -126,186 +210,373 @@ def view_farmers():
 
 
 # ---------------- SEARCH FARMER ----------------
+
 @app.route('/search_farmer', methods=['GET', 'POST'])
 def search_farmer():
+
     farmers = []
 
     if request.method == 'POST':
+
+        conn = get_db_connection()
+        cursor = conn.cursor(buffered=True)
+
         keyword = request.form['keyword']
 
-        sql = """
-        SELECT * FROM farmers
-        WHERE name LIKE %s OR village LIKE %s
-        """
-        cursor.execute(sql, ('%' + keyword + '%', '%' + keyword + '%'))
+        cursor.execute("""
+            SELECT * FROM farmers
+            WHERE name LIKE %s
+            OR village LIKE %s
+        """, (
+            '%' + keyword + '%',
+            '%' + keyword + '%'
+        ))
+
         farmers = cursor.fetchall()
 
-    return render_template('search_farmer.html', farmers=farmers)
+        cursor.close()
+        conn.close()
+
+    return render_template(
+        'search_farmer.html',
+        farmers=farmers
+    )
 
 
 # ---------------- ADD CROP ----------------
-@app.route("/add_crop", methods=["GET", "POST"])
+
+@app.route('/add_crop', methods=['GET', 'POST'])
 def add_crop():
 
-    if request.method == "POST":
-        farmer_id = request.form["farmer_id"]
-        crop_name = request.form["crop_name"]
-        fertilizer = request.form["fertilizer"]
-        season = request.form["season"]
-        area = request.form["area"]
-        yield_kg = request.form["yield_kg"]
-        selling_price = request.form["selling_price"]
-        cost_price = request.form["cost_price"]
+    conn = get_db_connection()
+    cursor = conn.cursor(buffered=True)
+
+    if request.method == 'POST':
+
+        if session['role'] == 'farmer':
+
+            farmer_id = session['farmer_id']
+
+        else:
+
+            farmer_id = request.form['farmer_id']
+
+        crop_name = request.form['crop_name']
+        fertilizer = request.form['fertilizer']
+        season = request.form['season']
+        area = request.form['area']
+        yield_kg = request.form['yield_kg']
+        selling_price = request.form['selling_price']
+        cost_price = request.form['cost_price']
 
         cursor.execute("""
             INSERT INTO farmer_crops
-            (farmer_id, crop_name, fertilizer, season, area, yield_kg, selling_price, cost_price)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-        """, (farmer_id, crop_name, fertilizer, season, area, yield_kg, selling_price, cost_price))
+            (
+                farmer_id,
+                crop_name,
+                fertilizer,
+                season,
+                area,
+                yield_kg,
+                selling_price,
+                cost_price
+            )
+            VALUES(%s,%s,%s,%s,%s,%s,%s,%s)
+        """, (
+            farmer_id,
+            crop_name,
+            fertilizer,
+            season,
+            area,
+            yield_kg,
+            selling_price,
+            cost_price
+        ))
 
-        db.commit()
+        conn.commit()
 
-        return redirect(url_for("view_crops"))
+        cursor.close()
+        conn.close()
 
-    cursor.execute("SELECT farmer_id, name FROM farmers")
+        return redirect(url_for('view_crops'))
+
+    cursor.execute("""
+        SELECT farmer_id, name
+        FROM farmers
+    """)
+
     farmers = cursor.fetchall()
 
-    return render_template("add_crop.html", farmers=farmers)
+    cursor.close()
+    conn.close()
+
+    return render_template(
+        'add_crop.html',
+        farmers=farmers
+    )
 
 
 # ---------------- VIEW CROPS ----------------
-@app.route("/view_crops")
+
+@app.route('/view_crops')
 def view_crops():
-    cursor.execute("""
-        SELECT 
-            farmer_crops.crop_id,
-            farmers.name,
-            farmer_crops.crop_name,
-            farmer_crops.fertilizer,
-            farmer_crops.season,
-            farmer_crops.area,
-            farmer_crops.yield_kg,
-            farmer_crops.selling_price,
-            farmer_crops.cost_price,
-            (farmer_crops.yield_kg * farmer_crops.selling_price - farmer_crops.cost_price) AS profit
-        FROM farmer_crops
-        JOIN farmers ON farmer_crops.farmer_id = farmers.farmer_id
-    """)
+
+    conn = get_db_connection()
+    cursor = conn.cursor(buffered=True)
+
+    if session['role'] == 'farmer':
+
+        cursor.execute("""
+            SELECT
+                crop_id,
+                farmer_id,
+                crop_name,
+                fertilizer,
+                season,
+                area,
+                yield_kg,
+                selling_price,
+                cost_price,
+                ((yield_kg * selling_price) - cost_price) AS profit
+
+            FROM farmer_crops
+
+            WHERE farmer_id=%s
+        """, (session['farmer_id'],))
+
+    else:
+
+        cursor.execute("""
+            SELECT
+                crop_id,
+                farmer_id,
+                crop_name,
+                fertilizer,
+                season,
+                area,
+                yield_kg,
+                selling_price,
+                cost_price,
+                ((yield_kg * selling_price) - cost_price) AS profit
+
+            FROM farmer_crops
+        """)
 
     crops = cursor.fetchall()
-    return render_template("view_crops.html", crops=crops)
 
-#----------------- DELETE CROP ----------------
-@app.route("/delete_crop/<int:id>")
-def delete_crop(id):
+    cursor.close()
+    conn.close()
 
-    cursor.execute("DELETE FROM farmer_crops WHERE crop_id=%s", (id,))
-    db.commit()
-
-    return redirect(url_for("view_crops"))
+    return render_template(
+        'view_crops.html',
+        crops=crops
+    )
 
 
 # ---------------- DELETE FARMER ----------------
+
 @app.route('/delete_farmer/<int:id>')
 def delete_farmer(id):
-    cursor.execute("DELETE FROM farmers WHERE farmer_id = %s", (id,))
-    db.commit()
+
+    if session['role'] != 'admin':
+
+        return "Access Denied"
+
+    conn = get_db_connection()
+    cursor = conn.cursor(buffered=True)
+
+    try:
+
+        cursor.execute("""
+            DELETE FROM fertilizer_usage
+            WHERE farmer_id=%s
+        """, (id,))
+
+        cursor.execute("""
+            DELETE FROM farmer_crops
+            WHERE farmer_id=%s
+        """, (id,))
+
+        cursor.execute("""
+            DELETE FROM users
+            WHERE farmer_id=%s
+        """, (id,))
+
+        cursor.execute("""
+            DELETE FROM farmers
+            WHERE farmer_id=%s
+        """, (id,))
+
+        conn.commit()
+
+    except Exception as e:
+
+        conn.rollback()
+        print(e)
+
+    cursor.close()
+    conn.close()
+
     return redirect(url_for('view_farmers'))
+
+# ---------------- DELETE CROP ----------------
+
+@app.route('/delete_crop/<int:id>')
+def delete_crop(id):
+
+    if session['role'] != 'admin':
+        return "Access Denied"
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+
+        cursor.execute("""
+            DELETE FROM farmer_crops
+            WHERE crop_id = %s
+        """, (id,))
+
+        conn.commit()
+
+    except Exception as e:
+
+        conn.rollback()
+        print(e)
+
+    finally:
+
+        cursor.close()
+        conn.close()
+
+    return redirect(url_for('view_crops'))
 
 
 # ---------------- UPDATE FARMER ----------------
+
 @app.route('/update_farmer/<int:id>', methods=['GET', 'POST'])
 def update_farmer(id):
 
+    conn = get_db_connection()
+    cursor = conn.cursor(buffered=True)
+
     if request.method == 'POST':
-        name = request.form['name']
-        phone = request.form['phone']
-        village = request.form['village']
 
         cursor.execute("""
             UPDATE farmers
-            SET name=%s, phone=%s, village=%s
+            SET name=%s,
+                phone=%s,
+                village=%s
             WHERE farmer_id=%s
-        """, (name, phone, village, id))
+        """, (
+            request.form['name'],
+            request.form['phone'],
+            request.form['village'],
+            id
+        ))
 
-        db.commit()
+        conn.commit()
+
+        cursor.close()
+        conn.close()
+
         return redirect(url_for('view_farmers'))
 
-    cursor.execute("SELECT * FROM farmers WHERE farmer_id=%s", (id,))
+    cursor.execute("""
+        SELECT * FROM farmers
+        WHERE farmer_id=%s
+    """, (id,))
+
     farmer = cursor.fetchone()
 
-    return render_template('update_farmer.html', farmer=farmer)
+    cursor.close()
+    conn.close()
+
+    return render_template(
+        'update_farmer.html',
+        farmer=farmer
+    )
 
 
 # ---------------- ADD FERTILIZER ----------------
+
 @app.route('/add_fertilizer', methods=['GET', 'POST'])
 def add_fertilizer():
 
     if request.method == 'POST':
-        fertilizer_name = request.form['fertilizer_name']
-        company = request.form['company']
-        quantity_available = request.form['quantity_available']
-        price_per_bag = request.form['price_per_bag']
+
+        conn = get_db_connection()
+        cursor = conn.cursor(buffered=True)
 
         cursor.execute("""
             INSERT INTO fertilizers
-            (fertilizer_name, company, quantity_available, price_per_bag)
-            VALUES(%s, %s, %s, %s)
-        """, (fertilizer_name, company, quantity_available, price_per_bag))
+            (
+                fertilizer_name,
+                company,
+                quantity_available,
+                price_per_bag
+            )
+            VALUES(%s,%s,%s,%s)
+        """, (
+            request.form['fertilizer_name'],
+            request.form['company'],
+            request.form['quantity_available'],
+            request.form['price_per_bag']
+        ))
 
-        db.commit()
+        conn.commit()
+
+        cursor.close()
+        conn.close()
+
         return redirect(url_for('view_fertilizers'))
 
     return render_template('add_fertilizer.html')
 
 
 # ---------------- VIEW FERTILIZERS ----------------
+
 @app.route('/view_fertilizers')
 def view_fertilizers():
-    cursor.execute("SELECT * FROM fertilizers")
+
+    conn = get_db_connection()
+    cursor = conn.cursor(buffered=True)
+
+    cursor.execute("""
+        SELECT * FROM fertilizers
+    """)
+
     fertilizers = cursor.fetchall()
-    return render_template('view_fertilizers.html', fertilizers=fertilizers)
+
+    cursor.close()
+    conn.close()
+
+    return render_template(
+        'view_fertilizers.html',
+        fertilizers=fertilizers
+    )
 
 
-# ---------------- FERTILIZER USAGE ----------------
-@app.route('/fertilizer_usage', methods=['GET', 'POST'])
-def fertilizer_usage():
+# ---------------- FARMER DETAILS ----------------
 
-    if request.method == 'POST':
-        farmer_id = request.form['farmer_id']
-        fertilizer_id = request.form['fertilizer_id']
-        crop_name = request.form['crop_name']
-        quantity_used = request.form['quantity_used']
-        usage_date = request.form['usage_date']
-
-        cursor.execute("""
-            INSERT INTO fertilizer_usage
-            (farmer_id, fertilizer_id, crop_name, quantity_used, usage_date)
-            VALUES(%s, %s, %s, %s, %s)
-        """, (farmer_id, fertilizer_id, crop_name, quantity_used, usage_date))
-
-        cursor.execute("""
-            UPDATE fertilizers
-            SET quantity_available = quantity_available - %s
-            WHERE fertilizer_id = %s
-        """, (quantity_used, fertilizer_id))
-
-        db.commit()
-        return redirect(url_for('dashboard'))
-
-    return render_template('fertilizer_usage.html')
-
-
-# ---------------- FARMER DETAILS (FIXED - ONLY ONE ROUTE) ----------------
-@app.route("/farmer_details/<int:farmer_id>")
+@app.route('/farmer_details/<int:farmer_id>')
 def farmer_details(farmer_id):
+
+    conn = get_db_connection()
+    cursor = conn.cursor(buffered=True)
 
     # FARMER INFO
 
     cursor.execute("""
-        SELECT farmer_id, name, phone, village
+        SELECT
+            farmer_id,
+            name,
+            phone,
+            village
+
         FROM farmers
-        WHERE farmer_id = %s
+
+        WHERE farmer_id=%s
     """, (farmer_id,))
 
     farmer = cursor.fetchone()
@@ -326,7 +597,7 @@ def farmer_details(farmer_id):
 
         FROM farmer_crops
 
-        WHERE farmer_id = %s
+        WHERE farmer_id=%s
     """, (farmer_id,))
 
     crops = cursor.fetchall()
@@ -345,66 +616,215 @@ def farmer_details(farmer_id):
         JOIN fertilizers f
         ON fu.fertilizer_id = f.fertilizer_id
 
-        WHERE fu.farmer_id = %s
+        WHERE fu.farmer_id=%s
     """, (farmer_id,))
 
     fertilizers = cursor.fetchall()
 
+    cursor.close()
+    conn.close()
+
     return render_template(
-        "farmer_details.html",
+        'farmer_details.html',
         farmer=farmer,
         crops=crops,
         fertilizers=fertilizers
     )
-# ---------------- DASHBOARD ----------------
-@app.route('/dashboard')
-def dashboard():
 
-    if session['role'] != 'admin':
 
-        return "Access Denied"
+# ---------------- DOWNLOAD PDF REPORT ----------------
 
-    # Total Farmers
-    cursor.execute("SELECT COUNT(*) FROM farmers")
-    total_farmers = cursor.fetchone()[0]
+@app.route("/download_report/<int:farmer_id>")
+def download_report(farmer_id):
 
-    # Total Fertilizers
-    cursor.execute("SELECT COUNT(*) FROM fertilizers")
-    total_fertilizers = cursor.fetchone()[0]
+    conn = get_db_connection()
+    cursor = conn.cursor(buffered=True)
 
-    # Total Stock
-    cursor.execute("SELECT SUM(quantity_available) FROM fertilizers")
-    total_stock = cursor.fetchone()[0]
-
-    # Total Usage
-    cursor.execute("SELECT SUM(quantity_used) FROM fertilizer_usage")
-    total_usage = cursor.fetchone()[0]
-
-    # PROFIT / LOSS DATA
     cursor.execute("""
-        SELECT crop_name,
-        (yield_kg * selling_price - cost_price) AS profit
+        SELECT farmer_id, name, phone, village
+        FROM farmers
+        WHERE farmer_id=%s
+    """, (farmer_id,))
+
+    farmer = cursor.fetchone()
+
+    cursor.execute("""
+        SELECT
+            crop_name,
+            season,
+            area,
+            yield_kg,
+            selling_price,
+            cost_price,
+            ((yield_kg * selling_price) - cost_price) AS profit
+
         FROM farmer_crops
+
+        WHERE farmer_id=%s
+    """, (farmer_id,))
+
+    crops = cursor.fetchall()
+
+    filename = f"Farmer_Report_{farmer_id}.pdf"
+
+    doc = SimpleDocTemplate(filename)
+
+    styles = getSampleStyleSheet()
+
+    elements = []
+
+    title = Paragraph(
+        "<b>Farmer Report</b>",
+        styles['Title']
+    )
+
+    elements.append(title)
+    elements.append(Spacer(1, 20))
+
+    farmer_info = f"""
+    <b>Farmer ID:</b> {farmer[0]}<br/>
+    <b>Name:</b> {farmer[1]}<br/>
+    <b>Phone:</b> {farmer[2]}<br/>
+    <b>Village:</b> {farmer[3]}<br/>
+    """
+
+    elements.append(
+        Paragraph(
+            farmer_info,
+            styles['BodyText']
+        )
+    )
+
+    elements.append(Spacer(1, 20))
+
+    data = [[
+        'Crop',
+        'Season',
+        'Area',
+        'Yield',
+        'Selling Price',
+        'Cost Price',
+        'Profit'
+    ]]
+
+    for crop in crops:
+
+        data.append([
+            crop[0],
+            crop[1],
+            crop[2],
+            crop[3],
+            crop[4],
+            crop[5],
+            crop[6]
+        ])
+
+    table = Table(data)
+
+    table.setStyle(TableStyle([
+
+        ('BACKGROUND', (0,0), (-1,0), colors.green),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('GRID', (0,0), (-1,-1), 1, colors.black),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0,0), (-1,0), 10),
+
+    ]))
+
+    elements.append(table)
+
+    doc.build(elements)
+
+    cursor.close()
+    conn.close()
+
+    return send_file(
+        filename,
+        as_attachment=True
+    )
+# ---------------- FERTILIZER USAGE ----------------
+
+@app.route('/fertilizer_usage', methods=['GET', 'POST'])
+def fertilizer_usage():
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    if request.method == 'POST':
+
+        try:
+
+            # FARMER LOGIN
+            if session['role'] == 'farmer':
+                farmer_id = session['farmer_id']
+
+            # ADMIN LOGIN
+            else:
+                farmer_id = request.form['farmer_id']
+
+            fertilizer_id = request.form['fertilizer_id']
+            crop_name = request.form['crop_name']
+            quantity_used = request.form['quantity_used']
+            usage_date = request.form['usage_date']
+
+            # INSERT USAGE
+            cursor.execute("""
+                INSERT INTO fertilizer_usage
+                (farmer_id, fertilizer_id, crop_name, quantity_used, usage_date)
+                VALUES(%s, %s, %s, %s, %s)
+            """, (
+                farmer_id,
+                fertilizer_id,
+                crop_name,
+                quantity_used,
+                usage_date
+            ))
+
+            # UPDATE STOCK
+            cursor.execute("""
+                UPDATE fertilizers
+                SET quantity_available = quantity_available - %s
+                WHERE fertilizer_id = %s
+            """, (
+                quantity_used,
+                fertilizer_id
+            ))
+
+            conn.commit()
+
+        except Exception as e:
+            conn.rollback()
+            print(e)
+
+        finally:
+            cursor.close()
+            conn.close()
+
+        return redirect(url_for('dashboard'))
+
+    # GET REQUEST
+
+    cursor.execute("SELECT farmer_id, name FROM farmers")
+    farmers = cursor.fetchall()
+
+    cursor.execute("""
+        SELECT fertilizer_id, fertilizer_name
+        FROM fertilizers
     """)
+    fertilizers = cursor.fetchall()
 
-    profit_data = cursor.fetchall()
-
-    crop_names = []
-    profits = []
-
-    for row in profit_data:
-        crop_names.append(row[0])
-        profits.append(float(row[1]))
+    cursor.close()
+    conn.close()
 
     return render_template(
-        'dashboard.html',
-        total_farmers=total_farmers,
-        total_fertilizers=total_fertilizers,
-        total_stock=total_stock,
-        total_usage=total_usage,
-        crop_names=crop_names,
-        profits=profits
+        'fertilizer_usage.html',
+        farmers=farmers,
+        fertilizers=fertilizers
     )
+
+
 # ---------------- RUN ----------------
+
 if __name__ == '__main__':
+
     app.run(debug=True)
